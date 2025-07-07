@@ -77,6 +77,14 @@ def parse_datetime(val):
     print(f"⚠️ DateTime sai định dạng: '{val}' -> set None")
     return None
 
+def parse_int_zero(val):
+    try:
+        if val is None or str(val).strip() in ('', 'null', 'none', 'n/a'):
+            return 0
+        return int(float(val))  # Chấp nhận cả 18500.0, 0, "0", ""
+    except Exception:
+        return 0
+
 def get_vn_time_range(hours=2):
     now_utc = datetime.now(timezone.utc)
     now_vn = now_utc + timedelta(hours=7)
@@ -110,6 +118,7 @@ def main():
     appsflyer_cols = list(APPSFLYER_TO_CH.keys())
     ch_cols = list(APPSFLYER_TO_CH.values())
     event_time_idx = ch_cols.index('event_time')
+    event_revenue_idx = ch_cols.index('event_revenue')
 
     total_inserted = 0
 
@@ -134,11 +143,13 @@ def main():
         mapped_data = []
         for row in raw_data:
             mapped_row = []
-            for af_col, ch_col in zip(appsflyer_cols, ch_cols):
+            for i, (af_col, ch_col) in enumerate(zip(appsflyer_cols, ch_cols)):
                 val = row.get(af_col)
                 if ch_col in DATETIME_CH_COLS:
                     dt_val = parse_datetime(val)
                     mapped_row.append(dt_val)
+                elif ch_col == "event_revenue":
+                    mapped_row.append(parse_int_zero(val))
                 else:
                     mapped_row.append(val if val not in (None, "", "null", "None") else None)
             # filter ngay lúc này theo event_time
@@ -160,7 +171,7 @@ def main():
             print("Không có dòng mới để insert.")
 
     client.disconnect()
-    print(f"\n== Tổng số rows insert vào ClickHouse (cả 2 app): {total_inserted} ==")
+    print(f"\n== Tổng số rows insert vào ClickHouse (cả {len(APP_IDS)} app): {total_inserted} ==")
 
 if __name__ == "__main__":
     main()
