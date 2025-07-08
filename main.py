@@ -109,6 +109,11 @@ def download_appsflyer_events(app_id, from_time, to_time):
     data = [row for row in reader]
     return data
 
+def get_bundle_id(app_id):
+    if app_id == "id1203171490":
+        return "vn.ghn.app.shiip"
+    return app_id
+
 def main():
     from_time, to_time = get_vn_time_range(2)
     print(f"🕒 Lấy AppsFlyer từ {from_time} đến {to_time} (Asia/Ho_Chi_Minh)")
@@ -122,50 +127,42 @@ def main():
 
     total_inserted = 0
 
-def get_bundle_id(app_id):
-    if app_id == "id1203171490":
-        return "vn.ghn.app.shiip"
-    return app_id
-
-# Trong vòng lặp từng app_id:
-for app_id in APP_IDS:
-    app_id = app_id.strip()
-    bundle_id = get_bundle_id(app_id)   # luôn trả về bundle_id đúng
-    print(f"\n==== Processing APP_ID: {app_id} (bundle_id={bundle_id}) ====")
-
-    # 1. Khi check trùng, dùng bundle_id thực tế
-    result = client.execute(
-        f"SELECT max(event_time) FROM {CH_TABLE} WHERE bundle_id='{bundle_id}'"
-    )
-    max_event_time = result[0][0] if result and result[0][0] else None
-    if max_event_time:
-        print(f"Max event_time đã có: {max_event_time}")
-    else:
-        print("Bảng trống hoặc chưa có event nào cho app này.")
-
-    raw_data = download_appsflyer_events(app_id, from_time, to_time)
-    if not raw_data:
-        print(f"⚠️ Không có data AppsFlyer cho app {app_id} trong khoảng này.")
-        continue
-
-    mapped_data = []
-    for row in raw_data:
-        mapped_row = []
-        for i, (af_col, ch_col) in enumerate(zip(appsflyer_cols, ch_cols)):
-            val = row.get(af_col)
-            if ch_col in DATETIME_CH_COLS:
-                dt_val = parse_datetime(val)
-                mapped_row.append(dt_val)
-            elif ch_col == "event_revenue":
-                mapped_row.append(parse_int_zero(val))
-            elif ch_col == "bundle_id":
-                mapped_row.append(bundle_id)   # luôn ghi đúng bundle_id thực tế
-            else:
-                mapped_row.append(val if val not in (None, "", "null", "None") else None)
+    for app_id in APP_IDS:
+        app_id = app_id.strip()
+        bundle_id = get_bundle_id(app_id)
+        print(f"\n==== Processing APP_ID: {app_id} (bundle_id={bundle_id}) ====")
+        result = client.execute(
+            f"SELECT max(event_time) FROM {CH_TABLE} WHERE bundle_id='{bundle_id}'"
+        )
+        max_event_time = result[0][0] if result and result[0][0] else None
         if max_event_time:
-            if mapped_row[event_time_idx] and mapped_row[event_time_idx] <= max_event_time:
-                continue  # skip old rows
-        mapped_data.append(mapped_row)
+            print(f"Max event_time đã có: {max_event_time}")
+        else:
+            print("Bảng trống hoặc chưa có event nào cho app này.")
+
+        raw_data = download_appsflyer_events(app_id, from_time, to_time)
+        if not raw_data:
+            print(f"⚠️ Không có data AppsFlyer cho app {app_id} trong khoảng này.")
+            continue
+
+        mapped_data = []
+        for row in raw_data:
+            mapped_row = []
+            for i, (af_col, ch_col) in enumerate(zip(appsflyer_cols, ch_cols)):
+                val = row.get(af_col)
+                if ch_col in DATETIME_CH_COLS:
+                    dt_val = parse_datetime(val)
+                    mapped_row.append(dt_val)
+                elif ch_col == "event_revenue":
+                    mapped_row.append(parse_int_zero(val))
+                elif ch_col == "bundle_id":
+                    mapped_row.append(bundle_id)
+                else:
+                    mapped_row.append(val if val not in (None, "", "null", "None") else None)
+            if max_event_time:
+                if mapped_row[event_time_idx] and mapped_row[event_time_idx] <= max_event_time:
+                    continue  # skip old rows
+            mapped_data.append(mapped_row)
 
         print(f"➕ Số dòng mới sẽ insert: {len(mapped_data)}")
 
